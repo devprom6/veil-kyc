@@ -1,0 +1,23 @@
+{
+  "name": "@veil-kyc/prover-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI + JS SDK for generating ZK eligibility proofs client-side (Day 2+).",
+  "scripts": {
+    "prove": "tsx src/prove.ts",
+    "test": "tsx test/prove.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
