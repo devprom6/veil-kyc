@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+target/
+circuits/build/
+
+# Generated artifacts
+attestations/
+proof.json
+public_inputs.json
+
+# Environment / secrets
+.env
+.env.local
+
+# Local dev issuer keys (issuer-service)
+issuer-service/.dev/
+
+# Logs / OS noise
+*.log
+.DS_Store
