@@ -14,3 +14,6 @@ it here — do not silently expand scope.
 - `PolicyParams { sanctioned_list_root, require_accredited }` is a provisional shape (README names the type but never defines it); grounded in README's described policy (sanctioned-list root + accredited flag).
 - verifier `verify_proof` keeps README's exact signature (`BytesN<256>` proof, `Vec<BytesN<32>>` public inputs); in soroban-sdk 25 `BytesN<N>` is N bytes, so proof=256B, inputs=32B — consistent with Groth16.
 - Contract stubs fail closed (verify_proof→false, verify_and_transfer→Err, is_nullifier_used→false); no policy/verification logic until Days 2-3.
+- `circuits/kyc_eligibility.circom` written to circom 2.1 syntax with a placeholder constraint (`1 * 1 === 1`) so the skeleton yields a valid r1cs; `circom --r1cs` verification is deferred because circom is not installed (per operator instruction).
+- Circuit placeholder sizes: attributes=4 (`[user, jurisdiction, accredited, sanctioned]`), merkle_path=8 (issuer attestation tree depth), signature=3 (`[R.x, R.y, S]`); will be re-derived when enforcement lands on Day 2.
+- Added public `eligible` output signal to the circuit: README says on-chain only a boolean "eligible / not eligible" is revealed, and Groth16 outputs are public signals.
