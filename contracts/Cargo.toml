@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["verifier", "policy_gate", "stablecoin_demo"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+# Protocol 25 ("X-Ray") — native BN254 + Poseidon host functions (CAP-79/CAP-75).
+# Pin =25.3.2: the latest self-consistent 25.x release. (=25.0.0 pulls
+# incompatible 25.3.x macros — see docs/decisions.md.) Builds require the
+# `wasm32v1-none` target on Rust 1.82+ (see docs/decisions.md).
+soroban-sdk = "=25.3.2"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
