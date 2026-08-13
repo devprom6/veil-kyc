@@ -1,0 +1,24 @@
+{
+  "name": "@veil-kyc/issuer-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference off-chain issuer: attribute intake, Poseidon commitments, EdDSA attestations (CLI only).",
+  "scripts": {
+    "attest": "tsx src/attest.ts",
+    "test": "tsx test/attest.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
