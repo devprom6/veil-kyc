@@ -1,0 +1,17 @@
+{
+  "name": "veil-kyc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-knowledge compliance for Stellar payments (see README.md)",
+  "license": "MIT",
+  "workspaces": [
+    "issuer-service",
+    "prover-cli"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
