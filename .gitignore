@@ -11,6 +11,7 @@ circuits/build/
 attestations/
 proof.json
 public_inputs.json
+test/circuit_inputs/
 
 # Environment / secrets
 .env
@@ -22,3 +23,6 @@ issuer-service/.dev/
 # Logs / OS noise
 *.log
 .DS_Store
+
+# Test snapshots
+contracts/verifier/test_snapshots/
