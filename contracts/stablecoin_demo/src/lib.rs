@@ -65,10 +65,13 @@ enum DataKey {
     Allowance(Address, Address),
 }
 
-/// Minimal SEP-41-compliant stablecoin implementable via
-/// `soroban_sdk::token::TokenClient` (matching function signatures) plus the
-/// admin-only `mint`. See docs/decisions.md Day 3 — the gate-only transfer
-/// restriction is layered on in a dedicated change.
+/// Minimal SEP-41-compliant stablecoin whose value can only move through the
+/// policy_gate contract.
+///
+/// Implements the SEP-41 function set with matching signatures (callable via
+/// `soroban_sdk::token::TokenClient`), plus the admin-only `mint`, and
+/// records the policy_gate address that is the *only* permitted source for
+/// value-moving calls. See docs/decisions.md Day 3.
 #[contract]
 pub struct StablecoinDemo;
 
@@ -121,26 +124,36 @@ impl StablecoinDemo {
     }
 
     /// Sep-41: transfer `amount` from `from` to `to`.
+    ///
+    /// Only reachable in practice when `from` is the policy_gate: it is the
+    /// sole address permitted as a source, and the only caller able to
+    /// authenticate as itself. The gate invokes this through
+    /// `verify_and_transfer` — the token cannot be moved directly.
     pub fn transfer(env: Env, from: Address, to: MuxedAddress, amount: i128) {
+        require_gate_source(&env, &from);
         from.require_auth();
         do_transfer(&env, &from, &to.address(), amount);
     }
 
     /// Sep-41: transfer on behalf of `from` consuming `spender`'s allowance.
+    /// Also restricted to the gate as source.
     pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128) {
+        require_gate_source(&env, &from);
         spender.require_auth();
         spend_allowance(&env, &from, &spender, amount);
         do_transfer(&env, &from, &to, amount);
     }
 
-    /// Sep-41: burn `amount` from `from`.
+    /// Sep-41: burn `amount` from `from`. Restricted to the gate as source.
     pub fn burn(env: Env, from: Address, amount: i128) {
+        require_gate_source(&env, &from);
         from.require_auth();
         do_burn(&env, &from, amount);
     }
 
-    /// Sep-41: burn on behalf of `from`.
+    /// Sep-41: burn on behalf of `from`. Restricted to the gate as source.
     pub fn burn_from(env: Env, spender: Address, from: Address, amount: i128) {
+        require_gate_source(&env, &from);
         spender.require_auth();
         spend_allowance(&env, &from, &spender, amount);
         do_burn(&env, &from, amount);
@@ -200,6 +213,14 @@ fn admin(env: &Env) -> Address {
 
 fn request_gate(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Gate).expect("uninitialized")
+}
+
+/// Verify that the only-ever transfer source is the configured policy_gate.
+fn require_gate_source(env: &Env, from: &Address) {
+    let gate = request_gate(env);
+    if from != &gate {
+        panic!("transfers only reachable via policy_gate");
+    }
 }
 
 fn balance(env: &Env, id: &Address) -> i128 {
