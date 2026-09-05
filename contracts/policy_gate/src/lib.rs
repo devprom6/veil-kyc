@@ -94,9 +94,14 @@ impl PolicyGate {
     /// Whether the given nullifier has already been spent in this policy
     /// context.
     ///
-    /// TODO(Day 3): nullifier storage.
-    #[allow(unused_variables)]
+    /// Nullifiers are bound to a context (corridor + period) inside the
+    /// circuit itself (`nullifier == Poseidon(commitment, context)`), so a
+    /// spent marker keyed purely by the 32-byte nullifier is context-scoped
+    /// by construction.
     pub fn is_nullifier_used(env: Env, nullifier: BytesN<32>) -> bool {
-        false
+        env.storage()
+            .instance()
+            .get(&DataKey::NullifierUsed(nullifier))
+            .unwrap_or(false)
     }
 }
