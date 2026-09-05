@@ -183,3 +183,224 @@ fn self_is_nullifier_used(env: &Env, nullifier: &BytesN<32>) -> bool {
         .get(&DataKey::NullifierUsed(nullifier.clone()))
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::{contract, contractimpl, testutils::Address as _, Bytes as SdkBytes, String};
+    use stablecoin_demo::{StablecoinDemo, StablecoinDemoClient};
+
+    /// Deterministic, context-scoped nullifier at Groth16 public-signal index 3
+    /// (see NULLIFIER_INDEX above).
+    const ANCHOR: [u8; 32] = [0xC0; 32];
+    fn nullifier_bytes(n: u8) -> [u8; 32] {
+        let mut b = ANCHOR;
+        b[0] ^= n;
+        b
+    }
+    fn public_inputs(env: &Env, nullifier: [u8; 32]) -> SdkBytes {
+        let mut arr = [0u8; 6 * 32];
+        arr[3 * 32..4 * 32].copy_from_slice(&nullifier);
+        SdkBytes::from_array(env, &arr)
+    }
+
+    /// Minimal stand-in for the verifier contract. Real Groth16 proofs come
+    /// from the circuit proving pipeline; the unit tests here exercise the
+    /// gate logic, so the mock exposes the same `verify_proof` signature and
+    /// returns a configurable verdict.
+    #[contracttype]
+    enum MockDataKey {
+        Verdict,
+    }
+
+    #[contract]
+    struct MockVerifier;
+
+    #[contractimpl]
+    impl MockVerifier {
+        pub fn set_result(env: Env, result: bool) {
+            env.storage().instance().set(&MockDataKey::Verdict, &result);
+        }
+        pub fn verify_proof(env: Env, proof: BytesN<256>, public_inputs: SdkBytes) -> bool {
+            let _ = (proof, public_inputs);
+            env.storage().instance().get(&MockDataKey::Verdict).unwrap_or(false)
+        }
+    }
+
+    /// env, verifier_id, token_id, gate_id
+    fn setup_env() -> (Env, Address, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+
+        let gate_id = env.register(PolicyGate, ());
+        let verifier_id = env.register(MockVerifier, ());
+        let token_id = env.register(StablecoinDemo, ());
+
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        token.initialize(
+            &admin,
+            &String::from_str(&env, "Veil Demo USD"),
+            &String::from_str(&env, "VDUSD"),
+            &7u32,
+            &gate_id,
+        );
+        token.mint(&gate_id, &1000i128); // demo supply held by the gate
+
+        MockVerifierClient::new(&env, &verifier_id).set_result(&true);
+
+        let params = PolicyParams {
+            sanctioned_list_root: BytesN::from_array(&env, &[0xAB; 32]),
+            require_accredited: true,
+            verifier: verifier_id.clone(),
+            token: token_id.clone(),
+        };
+        PolicyGateClient::new(&env, &gate_id).set_policy(
+            &admin,
+            &Symbol::new(&env, "USDC_NG"),
+            &params,
+        );
+
+        (env, verifier_id, token_id, gate_id)
+    }
+
+    #[test]
+    fn valid_proof_with_unused_nullifier_transfers() {
+        let (env, _verifier_id, token_id, gate_id) = setup_env();
+        let recipient = Address::generate(&env);
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+        let token = StablecoinDemoClient::new(&env, &token_id);
+
+        let proof = BytesN::from_array(&env, &[1u8; 256]);
+        let inputs = public_inputs(&env, nullifier_bytes(1));
+
+        let res = gate_client.try_verify_and_transfer(&proof, &inputs, &recipient, &100i128);
+        assert_eq!(res, Ok(Ok(())));
+
+        assert_eq!(token.balance(&recipient), 100);
+        assert_eq!(token.balance(&gate_id), 900);
+        assert!(gate_client.is_nullifier_used(&BytesN::from_array(&env, &nullifier_bytes(1))));
+    }
+
+    #[test]
+    fn replayed_nullifier_rejected() {
+        let (env, _verifier_id, token_id, gate_id) = setup_env();
+        let recipient = Address::generate(&env);
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+        let token = StablecoinDemoClient::new(&env, &token_id);
+
+        let proof = BytesN::from_array(&env, &[1u8; 256]);
+        let inputs = public_inputs(&env, nullifier_bytes(1));
+
+        assert_eq!(
+            gate_client.try_verify_and_transfer(&proof, &inputs, &recipient, &100i128),
+            Ok(Ok(()))
+        );
+        let replay = gate_client.try_verify_and_transfer(&proof, &inputs, &recipient, &100i128);
+        assert_eq!(replay, Err(Ok(Error::NullifierAlreadyUsed)));
+
+        // No second transfer occurred.
+        assert_eq!(token.balance(&recipient), 100);
+        assert_eq!(token.balance(&gate_id), 900);
+    }
+
+    #[test]
+    fn invalid_proof_rejected_without_recording_nullifier() {
+        let (env, verifier_id, token_id, gate_id) = setup_env();
+        let recipient = Address::generate(&env);
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+        let token = StablecoinDemoClient::new(&env, &token_id);
+
+        let verifier = MockVerifierClient::new(&env, &verifier_id);
+        verifier.set_result(&false);
+        let proof = BytesN::from_array(&env, &[0u8; 256]);
+        let inputs = public_inputs(&env, nullifier_bytes(2));
+
+        let res = gate_client.try_verify_and_transfer(&proof, &inputs, &recipient, &100i128);
+        assert_eq!(res, Err(Ok(Error::ProofVerificationFailed)));
+
+        // Nothing moved and the nullifier was not recorded.
+        assert_eq!(token.balance(&recipient), 0);
+        assert_eq!(token.balance(&gate_id), 1000);
+        assert!(!gate_client.is_nullifier_used(&BytesN::from_array(&env, &nullifier_bytes(2))));
+    }
+
+    #[test]
+    fn failed_verification_then_valid_proof_still_works() {
+        // Regression: an invalid attempt must not poison later valid spends.
+        let (env, verifier_id, token_id, gate_id) = setup_env();
+        let recipient = Address::generate(&env);
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        let verifier = MockVerifierClient::new(&env, &verifier_id);
+
+        verifier.set_result(&false);
+        let bad = gate_client.try_verify_and_transfer(
+            &BytesN::from_array(&env, &[0u8; 256]),
+            &public_inputs(&env, nullifier_bytes(3)),
+            &recipient,
+            &100i128,
+        );
+        assert_eq!(bad, Err(Ok(Error::ProofVerificationFailed)));
+
+        verifier.set_result(&true);
+        let good = gate_client.try_verify_and_transfer(
+            &BytesN::from_array(&env, &[1u8; 256]),
+            &public_inputs(&env, nullifier_bytes(3)),
+            &recipient,
+            &100i128,
+        );
+        assert_eq!(good, Ok(Ok(())));
+        assert_eq!(token.balance(&recipient), 100);
+    }
+
+    #[test]
+    fn policy_not_set_fails_closed() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let recipient = Address::generate(&env);
+
+        // No set_policy call yet.
+        let gate_id = env.register(PolicyGate, ());
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+
+        let res = gate_client.try_verify_and_transfer(
+            &BytesN::from_array(&env, &[1u8; 256]),
+            &public_inputs(&env, nullifier_bytes(5)),
+            &recipient,
+            &100i128,
+        );
+        assert_eq!(res, Err(Ok(Error::PolicyNotSet)));
+    }
+
+    #[test]
+    fn latest_set_policy_is_enforced() {
+        let (env, _verifier_id, token_id, gate_id) = setup_env();
+        let recipient = Address::generate(&env);
+        let gate_client = PolicyGateClient::new(&env, &gate_id);
+        let token = StablecoinDemoClient::new(&env, &token_id);
+
+        // Re-set the policy with a different sanctioned root; transfer still
+        // routes to the same verifier/token.
+        let admin = Address::generate(&env);
+        let new_verifier_id = env.register(MockVerifier, ());
+        MockVerifierClient::new(&env, &new_verifier_id).set_result(&true);
+        let params = PolicyParams {
+            sanctioned_list_root: BytesN::from_array(&env, &[0xCD; 32]),
+            require_accredited: false,
+            verifier: new_verifier_id,
+            token: token_id,
+        };
+        gate_client.set_policy(&admin, &Symbol::new(&env, "USDC_EU"), &params);
+
+        let res = gate_client.try_verify_and_transfer(
+            &BytesN::from_array(&env, &[2u8; 256]),
+            &public_inputs(&env, nullifier_bytes(6)),
+            &recipient,
+            &50i128,
+        );
+        assert_eq!(res, Ok(Ok(())));
+        assert_eq!(token.balance(&recipient), 50);
+    }
+}

@@ -25,4 +25,4 @@ issuer-service/.dev/
 .DS_Store
 
 # Test snapshots
-contracts/verifier/test_snapshots/
+contracts/*/test_snapshots/
