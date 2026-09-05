@@ -10,6 +10,8 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+verifier = { path = "../verifier" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+stablecoin_demo = { path = "../stablecoin_demo" }
