@@ -299,3 +299,117 @@ fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
         },
     );
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    /// env, admin, gate, token_id
+    fn setup_env() -> (Env, Address, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let gate = Address::generate(&env);
+
+        let token_id = env.register(StablecoinDemo, ());
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        token.initialize(
+            &admin,
+            &String::from_str(&env, "Veil Demo USD"),
+            &String::from_str(&env, "VDUSD"),
+            &7u32,
+            &gate,
+        );
+
+        (env, admin, gate, token_id)
+    }
+
+    #[test]
+    fn metadata_after_initialize() {
+        let (env, _admin, _gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        assert_eq!(token.name(), String::from_str(&env, "Veil Demo USD"));
+        assert_eq!(token.symbol(), String::from_str(&env, "VDUSD"));
+        assert_eq!(token.decimals(), 7);
+        assert_eq!(token.balance(&_gate), 0);
+    }
+
+    #[test]
+    fn mint_credits_balance() {
+        let (env, _admin, gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        token.mint(&gate, &1000i128);
+        assert_eq!(token.balance(&gate), 1000);
+    }
+
+    #[test]
+    fn gate_source_can_transfer() {
+        let (env, _admin, gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        let recipient = Address::generate(&env);
+
+        token.mint(&gate, &1000i128);
+        token.transfer(&gate, &MuxedAddress::from(recipient.clone()), &100i128);
+
+        assert_eq!(token.balance(&gate), 900);
+        assert_eq!(token.balance(&recipient), 100);
+    }
+
+    #[test]
+    #[should_panic(expected = "transfers only reachable via policy_gate")]
+    fn non_gate_holder_transfers_rejected() {
+        // The token can only move through the policy_gate: a plain holder
+        // cannot transfer its own balance directly.
+        let (env, _admin, _gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        let holder = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        token.mint(&holder, &100i128);
+        token.transfer(&holder, &MuxedAddress::from(recipient.clone()), &50i128);
+    }
+
+    #[test]
+    fn approve_then_gate_transfer_from() {
+        let (env, _admin, gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        let spender = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        token.mint(&gate, &1000i128);
+        // The gate authorizes spender to move part of its holding.
+        token.approve(&gate, &spender, &200i128, &u32::MAX);
+        assert_eq!(token.allowance(&gate, &spender), 200);
+
+        token.transfer_from(&spender, &gate, &recipient, &50i128);
+        assert_eq!(token.balance(&recipient), 50);
+        assert_eq!(token.allowance(&gate, &spender), 150);
+    }
+
+    #[test]
+    #[should_panic(expected = "insufficient balance")]
+    fn insufficient_balance_panics() {
+        let (env, _admin, gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        let recipient = Address::generate(&env);
+
+        token.mint(&gate, &10i128);
+        token.transfer(&gate, &MuxedAddress::from(recipient.clone()), &11i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "already initialized")]
+    fn double_initialize_rejected() {
+        let (env, admin, gate, token_id) = setup_env();
+        let token = StablecoinDemoClient::new(&env, &token_id);
+        token.initialize(
+            &admin,
+            &String::from_str(&env, "Veil Demo EUR"),
+            &String::from_str(&env, "VDEUR"),
+            &7u32,
+            &gate,
+        );
+    }
+}
