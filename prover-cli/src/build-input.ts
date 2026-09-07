@@ -128,15 +128,23 @@ class MerkleTree {
 
 // Policy grammar from README "Usage" §2, e.g.:
 //   jurisdiction_not_in:sanctioned_list;accredited:true
-// Returns the accredited flag and the sanctioned-list root (a field element
-// of the sanctioned jurisdiction, matching the demo circuit's inequality
-// check — see docs/decisions.md Day 2).
+// The demo sanctioned list is a single entry, so its Merkle root is the field
+// element of the sanctioned jurisdiction code. Exported so the deploy script
+// can store the same root in the gate's policy (the verifier enforces it via
+// the proof's public inputs; the stored value keeps the gate self-describing).
+export const SANCTIONED_JURISDICTION = "KP";
+
+export function sanctionedListRoot(poseidon: PoseidonHash): bigint {
+  return stringToFieldElement(SANCTIONED_JURISDICTION, poseidon);
+}
+
+/** Parse a policy string into the knobs the circuit/prover needs. */
 export function parsePolicy(
   policy: string,
   poseidon: PoseidonHash,
 ): { requireAccredited: boolean; sanctionedListRoot: bigint } {
   let requireAccredited = false;
-  let sanctionedListRoot: bigint | undefined;
+  let sanctionedListRootValue: bigint | undefined;
 
   for (const clause of policy.split(";")) {
     const [key, value] = clause.split(":");
@@ -144,9 +152,7 @@ export function parsePolicy(
     switch (key.trim()) {
       case "jurisdiction_not_in": {
         if (value === "sanctioned_list") {
-          // The demo sanctioned list is a single entry, so its Merkle root is
-          // the field element of the sanctioned jurisdiction code "KP".
-          sanctionedListRoot = stringToFieldElement("KP", poseidon);
+          sanctionedListRootValue = sanctionedListRoot(poseidon);
         }
         break;
       }
@@ -156,12 +162,12 @@ export function parsePolicy(
     }
   }
 
-  if (sanctionedListRoot === undefined) {
+  if (sanctionedListRootValue === undefined) {
     throw new Error(
       `policy must declare jurisdiction_not_in:sanctioned_list (got "${policy}")`,
     );
   }
-  return { requireAccredited, sanctionedListRoot };
+  return { requireAccredited, sanctionedListRoot: sanctionedListRootValue };
 }
 
 /**
