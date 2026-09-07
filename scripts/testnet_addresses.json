@@ -1,0 +1,23 @@
+{
+  "network": "testnet",
+  "note": "Stellar testnet deployments of veil-kyc. Contract IDs recorded by scripts/deploy_testnet.sh after a successful deploy+initialize.",
+  "deployer": "deployer",
+  "deployed_at": "2026-09-07T17:35:00Z",
+  "contracts": {
+    "verifier": "CCCEIKEUELT3MVIPCA3JUUH5C2NMTCBXG7BKM4X6NOEVNQX7YSILTNFV",
+    "policy_gate": "CDGCFKACOZC2S77Y3JAYT2M4IH56SRUMEBHCFIX26PA4SGZ4FIM63BWF",
+    "stablecoin_demo": "CDENH4YF2MTDVELIG6QIH22WCXDYC6AZE23KF6H2HZRK2FRKA7WB3L4U"
+  },
+  "verifier_vk_set": true,
+  "stablecoin_initialized": true,
+  "gate_policy": {
+    "policy_id": "USDC_NG",
+    "sanctioned_list_root": "0216cbd515af6cfaada0c1ebfc7da7c202f1355efe516fa81e832d4e7d46fa8a",
+    "require_accredited": true
+  },
+  "stablecoin": {
+    "name": "Veil Demo USD",
+    "symbol": "VDUSD",
+    "decimals": 7
+  }
+}
