@@ -6,7 +6,7 @@
   "description": "CLI + JS SDK for generating ZK eligibility proofs client-side (Day 2+).",
   "scripts": {
     "prove": "tsx src/prove.ts",
-    "test": "tsx test/prove.test.ts",
+    "test": "tsx test/soroban-blob.test.ts && tsx test/prove.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

@@ -58,3 +58,16 @@ it here — do not silently expand scope.
 - `Env::register_contract` is deprecated in SDK 25.3.2; tests use `env.register(C, ())`.
 - `.gitignore` generalized to `contracts/*/test_snapshots/` (policy_gate tests also emit host-invocation snapshots).
 - End of Day 3 status: all three contracts build to wasm (`cargo build --workspace --target wasm32v1-none --release`), `cargo test --workspace` passes, and the integration test demonstrates the full gate-then-transfer DoD locally (valid proof → transfer; replay → reject; invalid proof → reject).
+
+## Day 4
+
+- Encoding bridge resolved (the flagged integration friction point): snarkjs output maps to Soroban's Protocol 25 BN254 host-function byte layout with **no endian/base changes — it is pure byte re-packing**:
+  - Fr public inputs → 32-byte big-endian field elements (`fp32`), matched to `Fr::from_bytes` (which reduces via `From<U256>`).
+  - G1 (`proof.pi_a`, `pi_c`, VK `vk_alpha_1`, each `IC`) → 64 bytes `be(X) || be(Y)`.
+  - G2 (`proof.pi_b`, VK `vk_beta_2`/`gamma_2`/`delta_2`) → 128 bytes `be(c1_X)||be(c0_X)||be(c1_Y)||be(c0_Y)` — each Fp2 coordinate is stored imaginary-component-first, matching soroban-sdk `crypto/bn254.rs` ("Fp2 element encoding: `be_bytes(c1) || be_bytes(c0)`").
+  - Points are the Ethereum alt_bn128 precompile **uncompressed** encoding; top two flag bits unset.
+- snarkjs proof points are affine `[x, y]` (2 elements); snarkjs VK points are projective `[x, y, z=1]` (3 elements). The encoder accepts both tuple shapes and ignores the redundant affine `z`.
+- Public-signal order is fixed at [ eligible(output), attestation_root, sanctioned_list_root, nullifier, issuer_pubkey_x, issuer_pubkey_y ] (verified against `kyc_eligibility.sym`), so the nullifier sits at flat-blob offset `3 * 32`, consistent with policy_gate's `NULLIFIER_INDEX = 3`.
+- Implementation is a library (`prover-cli/src/soroban-blob.ts`) with a semantic unit test against the real `circuits/build/{proof,public,verification_key}.json` artifacts, so the on-chain-format guarantee is continuously checked, not one-off.
+- Toolchain this day: `stellar` CLI **28.0.0** (formerly `soroban` CLI; replaces the README's `soroban contract [...]` commands verbatim — same flags, new binary name). README Usage §3 rendered with `stellar contract invoke`.
+- Type-encoding work committed first (before the deployment/prove integration) so both the deploy script (`vk2blob`) and the prover CLI share one, tested encoder.
