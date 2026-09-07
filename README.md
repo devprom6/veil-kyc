@@ -193,7 +193,7 @@ npm run prove -- \
   --policy "jurisdiction_not_in:sanctioned_list;accredited:true"
 ```
 
-Outputs `proof.json` and `public_inputs.json`.
+Outputs `proof.json` and `public_inputs.json` (plus `proof.blob.json` and `public_inputs.blob.json`, the same artifacts in the verifier contract's byte format for `verify_and_transfer`).
 
 ### 3. Submit and verify on-chain
 
@@ -202,11 +202,13 @@ soroban contract invoke \
   --id <policy_gate_contract_id> \
   --network testnet \
   -- verify_and_transfer \
-  --proof ./proof.json \
-  --public_inputs ./public_inputs.json \
+  --proof $(cat ./proof.blob.json | jq -r .proof_bytes) \
+  --public_inputs $(cat ./public_inputs.blob.json | jq -r .public_inputs_bytes) \
   --recipient <recipient_address> \
   --amount 1000
 ```
+
+The `--proof` and `--public_inputs` flags take raw byte strings (hex, no `0x` prefix) in the verifier contract's expected format, produced by the prover as `proof.blob.json` / `public_inputs.blob.json`. The script `scripts/run_e2e.sh` wires issuer → prover → this invocation together.
 
 If the proof verifies and the policy is satisfied, the gated stablecoin transfer executes in the same call.
 
