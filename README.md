@@ -135,7 +135,7 @@ veil-kyc/
 
 ### Prerequisites
 
-- Rust + `cargo`, with the `wasm32-unknown-unknown` target
+- Rust + `cargo`, with the `wasm32v1-none` target
 - [Soroban CLI](https://developers.stellar.org/docs/tools/developer-tools)
 - Node.js ≥ 18
 - Circom ≥ 2.1 and snarkjs
@@ -149,10 +149,10 @@ cd veil-kyc
 # install JS/TS dependencies (issuer service, prover CLI)
 npm install
 
-# build the Soroban contracts
-cd contracts/verifier && cargo build --target wasm32-unknown-unknown --release
-cd ../policy_gate && cargo build --target wasm32-unknown-unknown --release
-cd ../stablecoin_demo && cargo build --target wasm32-unknown-unknown --release
+# build the Soroban contracts (wasm32v1-none, see docs/decisions.md Day 2)
+cd contracts/verifier && cargo build --target wasm32v1-none --release
+cd ../policy_gate && cargo build --target wasm32v1-none --release
+cd ../stablecoin_demo && cargo build --target wasm32v1-none --release
 ```
 
 ### Compile circuits
@@ -166,8 +166,8 @@ snarkjs groth16 setup build/kyc_eligibility.r1cs pot_final.ptau build/kyc_eligib
 ### Deploy to Stellar testnet
 
 ```bash
-soroban contract deploy \
-  --wasm contracts/verifier/target/wasm32-unknown-unknown/release/verifier.wasm \
+stellar contract deploy \
+  --wasm contracts/verifier/target/wasm32v1-none/release/verifier.wasm \
   --network testnet
 ```
 
@@ -198,7 +198,7 @@ Outputs `proof.json` and `public_inputs.json` (plus `proof.blob.json` and `publi
 ### 3. Submit and verify on-chain
 
 ```bash
-soroban contract invoke \
+stellar contract invoke \
   --id <policy_gate_contract_id> \
   --network testnet \
   -- verify_and_transfer \
@@ -236,11 +236,13 @@ Private inputs: attribute values, attribute-set Merkle path, issuer signature.
 pub fn verify_proof(
     env: Env,
     proof: BytesN<256>,
-    public_inputs: Vec<BytesN<32>>,
+    public_inputs: Bytes,
 ) -> bool;
 ```
 
 Thin wrapper around Soroban's native BN254 pairing and Poseidon host functions; stateless and reusable by any policy contract.
+
+> **Note:** `public_inputs` are a flat `Bytes` blob of N × 32-byte field elements, not `Vec<BytesN<32>>` (Soroban does not support generic type parameters on user-defined types — see docs/decisions.md Day 2).
 
 ### `policy_gate` contract
 
@@ -250,7 +252,7 @@ pub fn set_policy(env: Env, admin: Address, policy_id: Symbol, params: PolicyPar
 pub fn verify_and_transfer(
     env: Env,
     proof: BytesN<256>,
-    public_inputs: Vec<BytesN<32>>,
+    public_inputs: Bytes,
     recipient: Address,
     amount: i128,
 ) -> Result<(), Error>;
@@ -259,6 +261,8 @@ pub fn is_nullifier_used(env: Env, nullifier: BytesN<32>) -> bool;
 ```
 
 `verify_and_transfer` calls `verifier::verify_proof`, checks the nullifier hasn't been spent for the relevant policy context, records it, and only then invokes the underlying SEP-41 token transfer.
+
+> **Note:** As with `verifier::verify_proof`, `public_inputs` is a flat `Bytes` blob (N × 32) rather than `Vec<BytesN<32>>` (see docs/decisions.md Day 3).
 
 ## Security & Threat Model
 

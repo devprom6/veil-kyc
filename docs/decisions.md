@@ -76,3 +76,15 @@ it here — do not silently expand scope.
 - Toolchain note: the `stellar` CLI 28 (formerly `soroban`) renders contract args as **raw hex with no `0x` prefix** for `Bytes`/`BytesN`; `vk2blob.ts` strips the encoder's `0x` prefix accordingly.
 - Deploy order confirmed against live testnet this day: verifier (set_verification_key) → stablecoin (initialize, mint to gate) → policy_gate (set_policy). All three contract IDs recorded in `scripts/testnet_addresses.json`; the deploy script is idempotent across runs.
 - End-to-end testnet run succeeded (issuer → prover → verifier verify_and_transfer → transfer): tx hash `41909e219419b0ed9ce121d1112e272cf2c2bd0564e8ce2c47cd95e7e958be85`; after it, `is_nullifier_used == true`. Full record in `docs/testnet_run.md`.
+
+## Day 5
+
+- Local sandbox integration tests: policy_gate integration tests expanded from 3 to 9 (all in-test Env, no live network, no circom pipeline). The mock verifier gained a `set_reject_nullifier` / `clear_reject_nullifier` knob that rejects proofs carrying a flagged nullifier slot, simulating policy/jurisdiction rejections without a real circuit. New coverage: full issuer→prover→verifier→gate→transfer happy path, tampered public inputs (accepted and nullifier recorded by design — the verifier has already validated the proof against the supplied inputs), insufficient gate balance (panics via SEP-41), policy switch routing to a new verifier+token, disallowed jurisdiction (rejected by verifier), and multi-transfer to distinct recipients.
+- CLI ergonomics: both issuer-service and prover-cli now print `--help` (exit 0), clear per-flag "required" error messages with a "Run with --help" hint (exit 1), and success messages list produced artifacts. Command shapes in README's Usage section are unchanged.
+- README factual drift corrected to match implementation (logged here rather than guessed):
+  - Getting Started / build + deploy commands: contract wasm target is `wasm32v1-none` (was `wasm32-unknown-unknown`) — matches Day 1 decision and `scripts/deploy_testnet.sh`.
+  - Usage §3: `soroban contract invoke` → `stellar contract invoke` (the Stellar CLI 28 rename from Day 4; the README's initial §3 still used the old name in the Getting Started/deploy paths).
+  - Smart Contract Interface: `public_inputs: Vec<BytesN<32>>` → flat `Bytes` for both verifier and policy_gate, with an inline note pointing at the Day 2/Day 3 decisions (Soroban generics limitation).
+- README Roadmap: checked off the three completed foundational items (core circuit, verifier contract, issuer+prover) which were already marked; no new roadmap items added.
+- docs/architecture.md added: component responsibilities, data flow, the byte-format bridge, with a sequence diagram matching README's "How It Works".
+- CONTRIBUTING.md added pointing new contributors at the first unclaimed Roadmap item (browser-based proving) as a starting task.
