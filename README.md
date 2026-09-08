@@ -118,6 +118,7 @@ veil-kyc/
 ├── test/                     # Circuit, contract, and integration tests
 ├── docs/                     # Architecture notes, threat model, sequence diagrams
 ├── .env.example
+├── CONTRIBUTING.md
 ├── LICENSE
 └── README.md
 ```
@@ -309,7 +310,10 @@ Stellar is where real money already moves — stablecoins, cross-border remittan
 
 ## Contributing
 
-Issues and pull requests are welcome. Please open an issue describing the proposed change before submitting a large PR. Run `npm test` and `cargo test` before submitting.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for onboarding, test commands, and a
+suggested starting task. In short: open an issue describing your proposed
+change before submitting a large PR, and run `npm test` and
+`cargo test --workspace` before submitting.
 
 ## License
 
