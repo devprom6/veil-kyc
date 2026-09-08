@@ -176,6 +176,32 @@ function parseArgs(argv: string[]): Record<string, string> {
   return out;
 }
 
+function printHelp(): void {
+  console.log(`
+  issuer-service — sign a KYC attestation for a user
+
+  Usage:
+    npm run attest -- --user <pubkey> --jurisdiction <code> [--accredited true] [--sanctioned false]
+
+  Required flags:
+    --user <pubkey>           Stellar public key of the user being attested
+    --jurisdiction <code>     Two-letter jurisdiction code (e.g. NG, US, KP)
+
+  Optional flags:
+    --accredited <bool>       Whether the user is an accredited investor (default: false)
+    --sanctioned <bool>      Whether the user is on a sanctions list (default: false)
+    --help                   Show this help message
+
+  Environment:
+    ISSUER_PRIVATE_KEY        32-byte hex private key for signing (dev key auto-generated if unset)
+    ATTESTATION_OUT_DIR       Output directory for attestation JSON (default: attestations/)
+
+  Output:
+    Writes a signed attestation JSON file to the output directory containing
+    the user's Poseidon commitment, issuer public key, and EdDSA signature.
+`);
+}
+
 function parseBool(v: string | undefined, fallback: boolean): boolean {
   if (v === undefined) return fallback;
   switch (v.toLowerCase()) {
@@ -194,10 +220,22 @@ function parseBool(v: string | undefined, fallback: boolean): boolean {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args["help"] || args["h"]) {
+    printHelp();
+    process.exit(0);
+  }
+
   const user = args["user"];
   const jurisdiction = args["jurisdiction"];
-  if (!user) throw new Error("--user <pubkey> is required");
-  if (!jurisdiction) throw new Error("--jurisdiction <code> is required");
+  if (!user) {
+    console.error("Error: --user <pubkey> is required. Run with --help for usage.");
+    process.exit(1);
+  }
+  if (!jurisdiction) {
+    console.error("Error: --jurisdiction <code> is required. Run with --help for usage.");
+    process.exit(1);
+  }
 
   const accredited = parseBool(args["accredited"], false);
   const sanctioned = parseBool(args["sanctioned"], false);
@@ -210,13 +248,11 @@ async function main(): Promise<void> {
   const file = join(outDir, `${stamp}-${user}.json`);
   await writeFile(file, JSON.stringify(attestation, null, 2) + "\n", "utf8");
 
-  console.log(`[issuer] attestation written to ${file}`);
-  console.log(`[issuer] commitment   ${attestation.commitment}`);
+  console.log(`Attestation written to ${file}`);
+  console.log(`  Commitment:   ${attestation.commitment}`);
+  console.log(`  Issuer pubkey: x=${attestation.issuer_pubkey.x} y=${attestation.issuer_pubkey.y}`);
   console.log(
-    `[issuer] issuer_pubkey x=${attestation.issuer_pubkey.x} y=${attestation.issuer_pubkey.y}`,
-  );
-  console.log(
-    `[issuer] signature     R8=(${attestation.signature.R8.x}, ${attestation.signature.R8.y}) S=${attestation.signature.S}`,
+    `  Signature:     R8=(${attestation.signature.R8.x}, ${attestation.signature.R8.y}) S=${attestation.signature.S}`,
   );
 }
 
@@ -225,7 +261,7 @@ const isMain =
 
 if (isMain) {
   main().catch((err: unknown) => {
-    console.error(`[issuer] error: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   });
 }

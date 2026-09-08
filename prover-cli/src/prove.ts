@@ -33,6 +33,32 @@ interface ProveArtifacts {
   ptau?: string;
 }
 
+function printHelp(): void {
+  console.log(`
+  prover-cli — generate a ZK eligibility proof from an attestation
+
+  Usage:
+    npm run prove -- --attestation <path> --policy "<policy>" [--out <dir>] [--context <str>]
+
+  Required flags:
+    --attestation <path>      Path to the attestation JSON from issuer-service
+    --policy "<policy>"       Policy string, e.g. "jurisdiction_not_in:sanctioned_list;accredited:true"
+
+  Optional flags:
+    --out <dir>               Output directory for proof artifacts (default: current directory)
+    --context <str>           Nullifier context (corridor + period). Defaults to today's date.
+    --help                    Show this help message
+
+  Environment:
+    VEIL_KYC_CIRCUITS_BUILD   Path to the compiled circuit build directory (default: circuits/build/)
+
+  Output:
+    Writes input.json, proof.json, public_inputs.json, proof.blob.json and
+    public_inputs.blob.json to the output directory. The .blob.json files are
+    in the byte format expected by the verifier contract's verify_and_transfer.
+`);
+}
+
 function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -130,14 +156,20 @@ const isMain =
 if (isMain) {
   (async () => {
     const args = parseArgs(process.argv.slice(2));
+
+    if (args["help"] || args["h"]) {
+      printHelp();
+      process.exit(0);
+    }
+
     const attestationPath = args["attestation"];
     const policy = args["policy"];
     if (!attestationPath) {
-      console.error("prove: --attestation <path> is required");
+      console.error("Error: --attestation <path> is required. Run with --help for usage.");
       process.exit(1);
     }
     if (!policy) {
-      console.error("prove: --policy \"<jurisdiction_not_in:sanctioned_list;...>\" is required");
+      console.error(`Error: --policy "<policy>" is required. Run with --help for usage.`);
       process.exit(1);
     }
 
@@ -146,13 +178,15 @@ if (isMain) {
         out: args["out"],
         context: args["context"],
       });
-      console.log("[prover] proof.json            ->", proof);
-      console.log("[prover] public_inputs.json    ->", publicInputs);
-      console.log("[prover] proof.blob.json       ->", dirname(proof) + "/proof.blob.json");
-      console.log("[prover] public_inputs.blob.json ->", dirname(publicInputs) + "/public_inputs.blob.json");
+      console.log(`Proof generated successfully:`);
+      console.log(`  input.json              ->`, dirname(proof) + "/input.json");
+      console.log(`  proof.json              ->`, proof);
+      console.log(`  public_inputs.json      ->`, publicInputs);
+      console.log(`  proof.blob.json         ->`, dirname(proof) + "/proof.blob.json");
+      console.log(`  public_inputs.blob.json ->`, dirname(publicInputs) + "/public_inputs.blob.json");
     } catch (err) {
       console.error(
-        `[prover] ${err instanceof Error ? err.message : String(err)}`,
+        `Error: ${err instanceof Error ? err.message : String(err)}`,
       );
       process.exit(1);
     }
